@@ -169,9 +169,12 @@ def main():
             
             for filename in userzip.namelist():
                 if os.path.dirname(filename) == 'Sport-sessions/GPS-data':
-                    act = getactivity(userzip, os.path.basename(filename))
-                    gpxzip.writestr(act.id + '.gpx', act.gpx)
-                    activities.insert(act)
+                    try:
+                        act = getactivity(userzip, os.path.basename(filename))
+                        gpxzip.writestr(act.id + '.gpx', act.gpx)
+                        activities.insert(act)
+                    except:
+                        print('Bug with '+ os.path.basename(filename))
 
             html = ET.Element('html')
             body = ET.SubElement(html, 'body')
