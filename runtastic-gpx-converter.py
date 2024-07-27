@@ -5,7 +5,7 @@ import json
 import xml.etree.ElementTree as ET
 import datetime
 
-usage_message = 'RUNTASTIC-GPX-CONVERTER: bad command line'
+usage_message = 'Usage: python runtastic-gpx-converter.py <path_to_runtastic_export_zip>'
 started_message = 'conversion started, please wait ...'
 success_message = 'conversion completed'
 
@@ -49,16 +49,10 @@ def traversal(node):
         yield node.data
         yield from traversal(node.right)
 
-def transformdate(date):
+def transformdate(timestamp_utc_millis):
     # change date string into ISO format
-    date = date.split()
-    date = date[0] + 'T' + date[1] + date[2][0:3] + ':' + date[2][3:]
-    # build datetime object from ISO format
-    date = datetime.datetime.fromisoformat(date)
-    # change timezone from local to UTC
-    date = date.astimezone(datetime.timezone.utc)
-    # return updated date in ISO format
-    return date.isoformat(timespec='milliseconds')
+    timestamp = datetime.datetime.fromtimestamp(timestamp_utc_millis / 1000, tz = datetime.timezone.utc)
+    return timestamp.isoformat(timespec='milliseconds')
 
 class activity:
     def __init__(self):
@@ -81,18 +75,18 @@ def getactivity(zip, basename):
     # act.datetime = gpsdata[0]['timestamp']
 
     # change timestamp string into ISO format
-    timestamp = gpsdata[0]['timestamp'].split()
-    timestamp = timestamp[0] + 'T' + timestamp[1] + timestamp[2][0:3] + ':' + timestamp[2][3:]
+    timestamp = transformdate(gpsdata[0]['timestamp'])
     # build datetime object from ISO format
     act.datetime = datetime.datetime.fromisoformat(timestamp)
 
-    act.distance = '%.2f' % (sesdata['distance'] * 0.001) # from metres to kilometres
-    
+    distance = next(a['attributes']['distance'] for a in sesdata['features'] if 'track_metrics' == a['type'])
+    act.distance = '%.2f' % (distance * 0.001) # from metres to kilometres
+
     SS = (sesdata['duration'] * 0.001) # from milliseconds to seconds
     MM, SS = divmod(SS, 60)
     HH, MM = divmod(MM, 60)
     act.duration = '%02d:%02d:%02d' % (HH, MM, SS)  # from seconds to HH:MM:SS
-    
+
     attr = {
         'creator': 'Garmin Connect',
         'version': '1.1',
@@ -153,25 +147,36 @@ def getactivity(zip, basename):
     return act
 
 def main():
-    
+
     if len(sys.argv) < 2:
         print(usage_message)
         sys.exit()
-        
-    gpxzipname = os.path.join(os.path.dirname(sys.argv[1]), os.path.basename(sys.argv[1]).rstrip('.zip') + '_GPX.zip')
 
-    with zipfile.ZipFile(sys.argv[1], 'r') as userzip:
+    runtastic_export_zip_path = sys.argv[1]
+
+    gpxzipname = os.path.join(runtastic_export_zip_path.rstrip('.zip') + '_GPX.zip')
+
+    with zipfile.ZipFile(runtastic_export_zip_path, 'r') as userzip:
         with zipfile.ZipFile(gpxzipname, 'w', zipfile.ZIP_DEFLATED) as gpxzip:
 
             print(started_message)
 
             activities = BST(func=(lambda a, b : a.datetime < b.datetime))
-            
+
             for filename in userzip.namelist():
-                if os.path.dirname(filename) == 'Sport-sessions/GPS-data':
-                    act = getactivity(userzip, os.path.basename(filename))
-                    gpxzip.writestr(act.id + '.gpx', act.gpx)
-                    activities.insert(act)
+                try:
+                    # Sport-sessions/GPS-data contains 2 files per activity. One .json and one .gpx.
+                    # We want the .json file only - it should be available in all folders:
+                    # Sport-sessions
+                    # Sport-sessions/GPS-data
+                    # Sport-sessions/Elevation-data
+                    if os.path.dirname(filename) == 'Sport-sessions/GPS-data' \
+                            and filename.endswith('.json'): # Ignore .gpx files in the same folder
+                        act = getactivity(userzip, os.path.basename(filename))
+                        gpxzip.writestr(act.id + '.gpx', act.gpx)
+                        activities.insert(act)
+                except KeyError as e:
+                    print(f"KeyError: {e} - Skipping file {filename}")
 
             html = ET.Element('html')
             body = ET.SubElement(html, 'body')
@@ -192,7 +197,7 @@ def main():
                 for value in row:
                     td = ET.SubElement(tr, 'td', {'style': 'border: 1px solid black; padding: 2px 10px;'})
                     td.text = value
-                
+
             gpxzip.writestr('activities.html', ET.tostring(html, encoding="UTF-8", method="html"))
 
             print(success_message)
