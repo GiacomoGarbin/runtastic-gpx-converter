@@ -1,6 +1,18 @@
 # runtastic-gpx-converter
 
-This Python script converts Adidas Running (formerly Runtastic) account data exports to GPX format, ready to be imported into Garmin Connect.
+This Python script converts Adidas Running (formerly Runtastic) account data exports to Garmin-friendly activity archives.
+
+It supports older and newer adidas exports, including exports that:
+
+- store GPS timestamps as Unix milliseconds instead of formatted strings
+- omit `Sport-sessions/Elevation-data`
+- include pre-generated GPX files next to the GPS JSON payload
+- keep distance inside nested `features` objects instead of a top-level field
+
+The converter generates both:
+
+- `*_GPX.zip`: preserves the source GPX activity type where available
+- `*_TCX.zip`: better suited for Garmin Connect imports because TCX carries an explicit sport field (`Running`, `Biking`, or `Other`)
 
 ## Instructions
 
@@ -10,6 +22,12 @@ This Python script converts Adidas Running (formerly Runtastic) account data exp
 ```sh
 > py runtastic-gpx-converter.py YOUR-ACCOUNT-DATA.zip
 ```
-  this command will create a new ZIP file in the same folder as the original with all your account data converted to GPX format
 
-3. Import your fitness data in GPX format into Garmin Connect, as shown [here](https://support.garmin.com/en-IE/?faq=ACgfZF717vAeVfhHgPrFv6)
+This command will create two new ZIP files in the same folder as the original export:
+
+- `YOUR-ACCOUNT-DATA_GPX.zip`
+- `YOUR-ACCOUNT-DATA_TCX.zip`
+
+3. Import your fitness data into Garmin Connect, as shown [here](https://support.garmin.com/en-IE/?faq=ACgfZF717vAeVfhHgPrFv6)
+
+If Garmin Connect classifies GPX uploads as `Other`, prefer the generated TCX archive. Garmin Connect generally respects the TCX sport field for `Running` and `Biking`.
